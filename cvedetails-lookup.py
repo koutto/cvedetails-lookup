@@ -135,6 +135,7 @@ def parse_html_table_versions(html):
 
     for row in table_results.findAll('tr')[1:]:
         col = row.findAll('td')
+        #print(col)
         version = col[3].text.strip()
 
         version_id = retrieve_id_from_link(col[8].find('a')['href'], 'version')
@@ -234,9 +235,10 @@ if 'List of cve security vulnerabilities related to this exact version' not in r
         superior_version_found = False
         while i >= 0:
             version_search = args.version[:i]+'%'
+            info('Checking with version = {}'.format(version_search))
             resp = request_search(args.vendor or '', args.product, version_search)
 
-            if 'No matches' not in resp:
+            if 'No matches' not in resp and 'Could not find any vulnerabilities' not in resp:
                 # Need to handle several ids for a given version because cvedetails can have
                 # several ids for different languages, editions, updates for a given version number
                 versions_results = parse_html_table_versions(resp)
