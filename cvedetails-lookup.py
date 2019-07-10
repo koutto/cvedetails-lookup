@@ -216,7 +216,11 @@ def request_search(vendor, product, version):
             vendor  = vendor,
             product = product,
             version = version))
-    return r.text
+    if "class=\"g-recaptcha\"" not in r.text:
+        return r.text
+    else:
+        error('Sorry, a captcha was found on the page')
+        sys.exit(1)
 
 
 def is_cve_in_json(cve_id, json):
