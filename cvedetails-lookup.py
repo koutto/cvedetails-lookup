@@ -6,16 +6,17 @@
 # Perform vulnerabilities lookup on cvedetails.com
 #
 import argparse
-import bs4
-import re
 import pprint
+import re
 import sys
+import textwrap
+from collections import defaultdict
+from distutils.version import LooseVersion
+
+import bs4
 import colored
 import prettytable
-import textwrap
 import requests
-from distutils.version import LooseVersion
-from collections import defaultdict
 
 
 #------------------------------------------------------------------------------
@@ -24,34 +25,39 @@ from collections import defaultdict
 def colorize(string, color=None, highlight=None, attrs=None):
     """Apply style on a string"""
     # Colors list: https://pypi.org/project/colored/
-    return colored.stylize(string, 
+    return colored.stylize(string,
         (colored.fg(color) if color else '') + \
         (colored.bg(highlight) if highlight else '') + \
         (colored.attr(attrs) if attrs else ''))
 
+
 def remove_non_printable_chars(string):
     """Remove non-ASCII chars like chinese chars"""
-    printable = set("""0123456789abcdefghijklmnopqrstuvwxyz"""
+    printable = set(
+        """0123456789abcdefghijklmnopqrstuvwxyz"""
         """ABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ """)
     return ''.join(filter(lambda x: x in printable, string))
 
+
 def table(columns, data, hrules=True):
     """Print a table"""
-    columns = map(lambda x:colorize(x, attrs='bold'), columns)
+    columns = map(lambda x: colorize(x, attrs='bold'), columns)
     table = prettytable.PrettyTable(
-        hrules=prettytable.ALL if hrules else prettytable.FRAME, 
+        hrules=prettytable.ALL if hrules else prettytable.FRAME,
         field_names=columns)
     for row in data:
         table.add_row(row)
     table.align = 'l'
     print(table)
 
+
 def shorten(string, maxlength):
     """Shorten a string if it exceeds a given length"""
     if len(string) <= maxlength:
         return string
     else:
-        return textwrap.wrap(string, maxlength)[0]+'...'
+        return textwrap.wrap(string, maxlength)[0] + '...'
+
 
 def get_cvss_score(vuln, vulners_api):
     """Get CVSS score if available, otherwise get Vulners AI score"""
@@ -61,6 +67,7 @@ def get_cvss_score(vuln, vulners_api):
         return vulners_api.aiScore(vuln['description'])[0]
     else:
         return cvss
+
 
 def color_cvss(cvss):
     """Attribute a color to the CVSS score"""
@@ -77,22 +84,26 @@ def color_cvss(cvss):
         color = 'red'
     return color
 
+
 def info(string):
     """Print info message"""
     print(colorize('[*] ', color='light_blue', attrs='bold') + string)
+
 
 def warning(string):
     """Print warning message"""
     print(colorize('[!] ', color='dark_orange', attrs='bold') + \
         colorize(string, color='dark_orange'))
 
+
 def error(string):
     """Print warning message"""
     print(colorize('[!] {}'.format(string), color='red', attrs='bold'))
 
+
 def success(string):
     """Print success message"""
-    print(colorize('[+] {}'.format(string), color='green_3b', attrs='bold'))    
+    print(colorize('[+] {}'.format(string), color='green_3b', attrs='bold'))
 
 
 #------------------------------------------------------------------------------
@@ -124,7 +135,7 @@ def retrieve_id_from_link(href, type_id):
     """
     Retrieve id from cvedetails URL
     """
-    id_search = re.search('/'+type_id+'/([0-9]+)/', href)
+    id_search = re.search('/' + type_id + '/([0-9]+)/', href)
     if not id_search:
         return None
     return id_search.group(1)
@@ -140,7 +151,6 @@ def parse_html_table_versions(html):
 
     for row in table_results.findAll('tr')[1:]:
         col = row.findAll('td')
-        #print(col)
         version = col[3].text.strip()
 
         version_id = retrieve_id_from_link(col[8].find('a')['href'], 'version')
@@ -183,7 +193,7 @@ def get_ids_from_cve_page(resp, args):
 
 def get_ids_from_searchresults(resp, args):
     """
-    Get vendor id, product id from first result 
+    Get vendor id, product id from first result
     (first row) from search results page
     """
     soup = bs4.BeautifulSoup(resp, 'html.parser')
@@ -191,20 +201,21 @@ def get_ids_from_searchresults(resp, args):
 
     # Retrieve Vendor id
     row_1 = table_results.findAll('tr')[1]
-    vendor_id = retrieve_id_from_link(row_1.findAll('td')[1].find('a')['href'], 'vendor')
+    vendor_id = retrieve_id_from_link(
+        row_1.findAll('td')[1].find('a')['href'], 'vendor')
     if not vendor_id:
         error('Error: Unable to get Vendor id !')
         sys.exit(1)
     vendor = args.vendor or row_1.findAll('td')[1].find('a').text
 
     # Retrieve Product id
-    product_id = retrieve_id_from_link(row_1.findAll('td')[2].find('a')['href'], 'product')
+    product_id = retrieve_id_from_link(
+        row_1.findAll('td')[2].find('a')['href'], 'product')
     if not product_id:
         error('Error: Unable to get Product id !')
         sys.exit(1)
 
     return vendor, vendor_id, product_id
-
 
 
 def request_search(vendor, product, version):
@@ -216,11 +227,12 @@ def request_search(vendor, product, version):
             vendor  = vendor,
             product = product,
             version = version))
-    if "class=\"g-recaptcha\"" not in r.text:
-        return r.text
-    else:
-        error('Sorry, a captcha was found on the page')
+
+    if r.status_code != 200:
+        error('HTTP Error occured. Code {} returned'.format(r.status_code))
         sys.exit(1)
+    else:
+        return r.text
 
 
 def is_cve_in_json(cve_id, json):
@@ -244,15 +256,23 @@ def merge_jsons(jsons_list):
 #------------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--vendor', help="Vendor (optional)", 
-    action='store', dest='vendor', default='')
-parser.add_argument('--product', help='Product (required)', 
-    action='store', required=True, dest='product')
-parser.add_argument('--version', help='Version (required)', 
-    action='store', required=True, dest='version')
+parser.add_argument('--vendor',
+                    help="Vendor (optional)",
+                    action='store',
+                    dest='vendor',
+                    default='')
+parser.add_argument('--product',
+                    help='Product (required)',
+                    action='store',
+                    required=True,
+                    dest='product')
+parser.add_argument('--version',
+                    help='Version (required)',
+                    action='store',
+                    required=True,
+                    dest='version')
 
 args = parser.parse_args()
-
 
 #------------------------------------------------------------------------------
 # Processing
@@ -266,7 +286,6 @@ info('Looking for "{vendor}{delim}{product} {version}" in cvedetails.com ' \
 
 resp = request_search(args.vendor, args.product, args.version)
 
-
 #
 # Case when there is not one exact match found
 #
@@ -278,44 +297,49 @@ if 'List of cve security vulnerabilities related to this exact version' not in r
         versions_results = parse_html_table_versions(resp)
 
         if args.version in versions_results:
-            version_id = versions_results[args.version] # list of ids
+            version_id = versions_results[args.version]  # list of ids
             version = args.version
             success('Exact match found in the database (in {} entries, ' \
                 'results will be merged)'.format(len(version_id)))
-            vendor, vendor_id, product_id = get_ids_from_searchresults(resp, args)
+            vendor, vendor_id, product_id = get_ids_from_searchresults(
+                resp, args)
             version_found = True
 
     # No exact match found
     if not version_found:
-        warning('No exact match for this product/version. Checking for CVE in newer versions...')
+        warning(
+            'No exact match for this product/version. Checking for CVE in newer versions...'
+        )
 
         # Check if vendor+product is actually referenced in the database
         resp = request_search(args.vendor or '', args.product, '')
 
         if 'No matches' in resp:
-            error('The product "{vendor}{delim}{product}" is not referenced in cvedetails.com database !'.format(
-                vendor  = args.vendor or '',
-                delim   = ' ' if args.vendor else '',
-                product = args.product))
+            error(
+                'The product "{vendor}{delim}{product}" is not referenced in cvedetails.com database !'
+                .format(vendor=args.vendor or '',
+                        delim=' ' if args.vendor else '',
+                        product=args.product))
             sys.exit(1)
 
         # Check if there are referenced newer versions and take the closest one to the targeted version
-        # Looping around targeted version till a newer version is found because cvedetails limits to 100 results 
-        # per search. 
-        # E.g. searching for "Nginx 0.8" will not work, for "Nginx" without version will only display the first 
+        # Looping around targeted version till a newer version is found because cvedetails limits to 100 results
+        # per search.
+        # E.g. searching for "Nginx 0.8" will not work, for "Nginx" without version will only display the first
         # 100 results which are versions older than 0.8, but searching for "Nginx 0.8%" will allow to find
         # newer version.
         i = len(args.version)
         superior_version_found = False
         while i >= 0:
-            version_search = args.version[:i]+'%'
+            version_search = args.version[:i] + '%'
             info('Checking with version = {}'.format(version_search))
-            resp = request_search(args.vendor or '', args.product, version_search)
-            #print(resp)
+            resp = request_search(args.vendor or '', args.product,
+                                  version_search)
 
             # If CVE results is directly displayed
             if 'Security Vulnerabilities' in resp:
-                vendor, vendor_id, product_id, version, version_id = get_ids_from_cve_page(resp, args)
+                vendor, vendor_id, product_id, version, version_id = get_ids_from_cve_page(
+                    resp, args)
 
                 try:
                     if LooseVersion(version) >= LooseVersion(args.version):
@@ -329,10 +353,13 @@ if 'List of cve security vulnerabilities related to this exact version' not in r
                 # Need to handle several ids for a given version because cvedetails can have
                 # several ids for different languages, editions, updates for a given version number
                 versions_results = parse_html_table_versions(resp)
-                
-                version = get_closest_superior_version(args.version, versions_results.keys())
-                version_id = versions_results[version] # list (may contain several ids)
-                vendor, vendor_id, product_id = get_ids_from_searchresults(resp, args)
+
+                version = get_closest_superior_version(args.version,
+                                                       versions_results.keys())
+                version_id = versions_results[
+                    version]  # list (may contain several ids)
+                vendor, vendor_id, product_id = get_ids_from_searchresults(
+                    resp, args)
 
                 if version:
                     superior_version_found = True
@@ -343,20 +370,19 @@ if 'List of cve security vulnerabilities related to this exact version' not in r
             error('No superior version found in cvedetails.com database')
             sys.exit(1)
         else:
-            success('Closest superior version found in database is: {}'.format(version))
-    
-    
-
+            success('Closest superior version found in database is: {}'.format(
+                version))
 
 #
 # Case when there is an exact match found in the database
-# 
+#
 else:
     success('Exact match found in the database')
 
     # Retrieve Vendor & Vendor_id, Product id, Version id from the CVE
     # results page
-    vendor, vendor_id, product_id, version, version_id = get_ids_from_cve_page(resp, args)
+    vendor, vendor_id, product_id, version, version_id = get_ids_from_cve_page(
+        resp, args)
 
 #
 # Fetch CVE results
@@ -369,7 +395,6 @@ info('IDs summary: Vendor={vendor} [{vendor_id}] | Product={product} ' \
         product_id = product_id,
         version    = version,
         version_id = ','.join(version_id)))
-
 
 jsons_list = list()
 for v_id in version_id:
@@ -403,7 +428,6 @@ else:
     warning('No CVE found in database')
     sys.exit(1)
 
-
 #
 # Display CVE results
 #
@@ -419,11 +443,14 @@ data = list()
 for r in results:
     data.append([
         colorize(r['cve_id'], attrs='bold'),
-        colorize(r['cvss_score'], color=color_cvss(r['cvss_score']), attrs='bold'),
+        colorize(r['cvss_score'],
+                 color=color_cvss(r['cvss_score']),
+                 attrs='bold'),
         r['publish_date'],
         textwrap.fill(r['summary'], 80),
         r['url'],
-        'None' if r['exploit_count'] == '0' else colorize(r['exploit_count'], color='red', attrs='bold'),
+        'None' if r['exploit_count'] == '0' else colorize(
+            r['exploit_count'], color='red', attrs='bold'),
     ])
 
 info('Results ordered by published date (desc):')
