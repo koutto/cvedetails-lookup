@@ -271,6 +271,11 @@ parser.add_argument('--version',
                     action='store',
                     required=True,
                     dest='version')
+parser.add_argument('--csv',
+                    help='Output as CSV file (fields separated by semicolon)',
+                    action='store',
+                    metavar='<output-filename>',
+                    dest='csv')
 
 args = parser.parse_args()
 
@@ -455,3 +460,19 @@ for r in results:
 
 info('Results ordered by published date (desc):')
 table(columns, data, hrules=True)
+
+if args.csv:
+    try:
+        with open(args.csv, 'w') as f:
+            f.write('CVE-ID;CVSS;Date;Description;URL;Exploit?\n')
+            for r in results:
+                f.write('{cve};{cvss};{date};{description};{url};{exploit}\n'.format(
+                    cve=r['cve_id'],
+                    cvss=r['cvss_score'],
+                    date=r['publish_date'],
+                    description=r['summary'].replace(';',','),
+                    url=r['url'],
+                    exploit='None' if r['exploit_count'] == '0' else r['exploit_count']))
+        info('CSV output written to {csv} file'.format(csv=args.csv))
+    except Exception as e:
+        error('An error occured when trying to write CSV output: {exc}'.format(exc=e))
