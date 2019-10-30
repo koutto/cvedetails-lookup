@@ -276,6 +276,10 @@ parser.add_argument('--csv',
                     action='store',
                     metavar='<output-filename>',
                     dest='csv')
+parser.add_argument('--display-csv',
+                    help='Display CSV data at the end',
+                    action='store_true',
+                    dest='displaycsv')
 
 args = parser.parse_args()
 
@@ -461,18 +465,27 @@ for r in results:
 info('Results ordered by published date (desc):')
 table(columns, data, hrules=True)
 
-if args.csv:
-    try:
-        with open(args.csv, 'w') as f:
-            f.write('CVE-ID;CVSS;Date;Description;URL;Exploit?\n')
-            for r in results:
-                f.write('{cve};{cvss};{date};{description};{url};{exploit}\n'.format(
-                    cve=r['cve_id'],
-                    cvss=r['cvss_score'],
-                    date=r['publish_date'],
-                    description=r['summary'].replace(';',','),
-                    url=r['url'],
-                    exploit='None' if r['exploit_count'] == '0' else r['exploit_count']))
-        info('CSV output written to {csv} file'.format(csv=args.csv))
-    except Exception as e:
-        error('An error occured when trying to write CSV output: {exc}'.format(exc=e))
+if args.csv or args.displaycsv:
+    csvdata = 'CVE-ID;CVSS;Date;Description;URL;Exploit?\n'
+    for r in results:
+        csvdata += '{cve};{cvss};{date};{description};{url};{exploit}\n'.format(
+            cve=r['cve_id'],
+            cvss=r['cvss_score'],
+            date=r['publish_date'],
+            description=r['summary'].replace(';',','),
+            url=r['url'],
+            exploit='None' if r['exploit_count'] == '0' else r['exploit_count']) 
+
+    if args.displaycsv and len(results) > 0:
+        print()
+        info('CSV output:')
+        print(csvdata)
+
+    if args.csv: 
+        try:
+            with open(args.csv, 'w') as f:
+                f.write(csvdata)
+
+            info('CSV output written to {csv} file'.format(csv=args.csv))
+        except Exception as e:
+            error('An error occured when trying to write CSV output: {exc}'.format(exc=e))
