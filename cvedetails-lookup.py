@@ -466,7 +466,7 @@ info('Results ordered by published date (desc):')
 table(columns, data, hrules=True)
 
 if args.csv or args.displaycsv:
-    csvdata = 'CVE-ID;CVSS;Date;Description;URL;Exploit?\n'
+    csvdata = 'ID;CVSS;Date;Description;URL;Exploit?\n'
     for r in results:
         csvdata += '{cve};{cvss};{date};{description};{url};{exploit}\n'.format(
             cve=r['cve_id'],
