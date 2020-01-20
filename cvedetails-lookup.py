@@ -157,7 +157,7 @@ def parse_html_table_versions(html):
     table_results = soup.find(class_="searchresults")
     versions_results = defaultdict(list)
 
-    if not versions_results:
+    if not table_results:
         error(
             "Error: cvedetails does not return a table with available versions. "
             "There is probably a bug on cvedetails or database is down ! "
