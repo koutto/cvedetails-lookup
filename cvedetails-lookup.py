@@ -154,7 +154,8 @@ def parse_html_table_versions(html):
     Parse HTML results into dict { 'version': [ list of corresponding id ]}
     """
     soup = bs4.BeautifulSoup(html, "html.parser")
-    table_results = soup.find(class_="searchresults")
+    # table_results = soup.find(class_="searchresults")
+    table_results = soup.find("div", id="searchresults")
     versions_results = defaultdict(list)
 
     if not table_results:
@@ -191,7 +192,13 @@ def get_ids_from_cve_page(resp, args):
         sys.exit(1)
 
     # Retrieve Product_id
-    product_id = retrieve_id_from_link(title_links[1]["href"], "product")
+    # Check if the second link follows the new format
+    if "version-list" in title_links[1]["href"]:
+        # Get the second number from the "version-list" link
+        product_id = title_links[1]["href"].split("/")[3]
+    else:
+        product_id = retrieve_id_from_link(title_links[1]["href"], "product")
+
     if not product_id:
         error("Error: Unable to get Product id !")
         sys.exit(1)
@@ -205,14 +212,14 @@ def get_ids_from_cve_page(resp, args):
 
     return vendor, vendor_id, product_id, version, version_id
 
-
 def get_ids_from_searchresults(resp, args):
     """
     Get vendor id, product id from first result
     (first row) from search results page
     """
     soup = bs4.BeautifulSoup(resp, "html.parser")
-    table_results = soup.find(class_="searchresults")
+    # table_results = soup.find(class_="searchresults")
+    table_results = soup.find("div", id="searchresults")
 
     # Retrieve Vendor id
     row_1 = table_results.findAll("tr")[1]
@@ -226,6 +233,7 @@ def get_ids_from_searchresults(resp, args):
     product_id = retrieve_id_from_link(
         row_1.findAll("td")[2].find("a")["href"], "product"
     )
+    print(product_id)
     if not product_id:
         error("Error: Unable to get Product id !")
         sys.exit(1)
@@ -312,6 +320,7 @@ info(
 )
 
 resp = request_search(args.vendor, args.product, args.version)
+# print(resp)
 
 #
 # Case when there is not one exact match found
@@ -322,6 +331,7 @@ if "List of cve security vulnerabilities related to this exact version" not in r
     version_found = False
     if "No matches" not in resp:
         versions_results = parse_html_table_versions(resp)
+        # print(versions_results)
 
         if args.version in versions_results:
             version_id = versions_results[args.version]  # list of ids
@@ -469,19 +479,25 @@ else:
 #
 # Display CVE results
 #
-columns = ["ID", "CVSS", "Date", "Description", "URL", "Exploit?"]
+# columns = ["ID", "CVSS", "Date", "Description", "URL", "Exploit?"]
+columns = ["ID", "CVSS", "Date", "URL", "Exploit?"]
 data = list()
+
+total_results = len(results)
+print(colorize(f"Total of vulnerabilities: {total_results}", color="red", attrs="bold"))
+
 for r in results:
+    # Check if "url" key exists in the dictionary
+    url_value = r.get("url", "N/A")
+
     data.append(
         [
             colorize(r["cve_id"], attrs="bold"),
             colorize(r["cvss_score"], color=color_cvss(r["cvss_score"]), attrs="bold"),
             r["publish_date"],
-            textwrap.fill(r["summary"], 80),
-            r["url"],
-            "None"
-            if r["exploit_count"] == "0"
-            else colorize(r["exploit_count"], color="red", attrs="bold"),
+            # textwrap.fill(r["summary"], 80),
+            url_value,  # Use the value or "N/A" if the key is not present
+            "None" if r["exploit_count"] == "0" else colorize(r["exploit_count"], color="red", attrs="bold"),
         ]
     )
 
